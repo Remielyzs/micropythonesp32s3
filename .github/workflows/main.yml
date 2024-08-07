@@ -1,0 +1,70 @@
+name: ESP32 - S3 Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu - latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup - python@v2
+        with:
+          python - version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          sudo apt - get update
+          sudo apt - get install - y gcc
+          export dir = / www / wwwroot / esp32s3
+          mkdir - p $dir
+          cd $dir
+          git clone - b v4.4 -- recursive https: // github.com / espressif / esp - idf.git
+          cd $dir / esp - idf
+          git checkout v4.4
+          git submodule update -- init -- recursive
+        ./ install.sh
+          source $dir / export.sh
+
+      - name: Compile MicroPython (optional)
+        run: |
+          cd $dir
+          git clone https: // github.com / micropython / micropython.git
+          cd $dir / micropython
+          make - C mpy - cross
+          cd $dir / micropython / ports / esp32
+          make submodules
+
+      - name: Compile lv_micropython
+        run: |
+          cd $dir
+          git clone https: // github.com / lvgl / lv_micropython.git
+          cd $dir / lv_micropython
+          git submodule update -- init -- recursive lib / lv_bindings
+          make - C mpy - cross
+          cd $dir / lv_micropython / ports / esp32
+          make submodules
+          sed - i '394s/adc_gpio_init/gpio_init/' driver / esp32 / modrtch.c
+          sed - i '249s/^.*$/uint32_t gpio_input_get_high(void) { return 0; }/; 250s/^.*$/void gpio_output_set_high(uint32_t set_mask, uint32_t clear_mask, uint32_t enable_mask, uint32_t disable_mask) { }/; 251s/^.*$/esp_err_t rtc_gpio_force_hold_all(void) { return ESP_OK; }/' driver / esp32 / espidf.c
+          sed - i '83s/^.*$/static inline void SPH0645_WORKAROUND(int i2s_num)/; 84s/^.*$/#if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2/' driver / esp32 / espidf.h
+          sed - i '182s/^.*$/enum {/; 183s/^.*$/#if CONFIG_IDF_TARGET_ESP32/' driver / esp32 / espidf.h
+          sed - i '234s/^.*$/            # USE SPI_DMA_CH_AUTO/' driver / esp32 / ili9XXX.py
+          sed - i '60s/^.*$/        #if CONFIG_IDF_TARGET_ESP32/' driver / esp32 / modrtch.c
+          sed - i '72s/^.*$/        #elif CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32H2/' driver / esp32 / modrtch.c
+          sed - i '421s/^.*$/        #if CONFIG_IDF_TARGET_ESP32 || CONFIG_IDF_TARGET_ESP32S2/' driver / esp32 / modrtch.c
+          sed - i '21s/^.*$/        mp_ptr_t * self = (mp_ptr_t *) MP_OBJ_TO_PTR(self_in);/' driver / include / common.h
+          sed - i '112s/^.*$/        if (IDF_TARGET STREQUAL "esp32s3")/' mkrules.cmake
+          sed - i '149s/^.*$/                ${FILTER_HEADERS}/' mkrules.cmake
+          make BOARD = GENERIC_S3_SPIRAM
+
+      - name: Upload artifacts (optional)
+        if: success()
+        uses: actions/upload - artifact@v2
+        with:
+          name: firmware - bin
+          path: $dir / lv_micropython / ports / esp32 / build - GENERIC_S3_SPIRAM / firmware.bin
