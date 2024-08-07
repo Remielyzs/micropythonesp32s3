@@ -28,7 +28,7 @@ jobs:
           cd $dir / esp - idf
           git checkout v4.4
           git submodule update -- init -- recursive
-        ./ install.sh
+          ./ install.sh
           source $dir / export.sh
 
       - name: Compile MicroPython (optional)
